@@ -148,13 +148,19 @@ class Recommender:
     @classmethod
     def load(cls, rebuild=False):
         """Load the cached model, building (and caching) it on first run."""
+        # Pickle plain data, not the Recommender object: when built via
+        # `python recommender.py` the class lives in `__main__`, which a server
+        # like gunicorn could not resolve when unpickling.
         if not rebuild and os.path.exists(CACHE_PATH):
             with open(CACHE_PATH, "rb") as f:
-                return pickle.load(f)
+                state = pickle.load(f)
+            model = cls.__new__(cls)
+            model.__dict__.update(state)
+            return model
         model = cls(load_movies())
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
         with open(CACHE_PATH, "wb") as f:
-            pickle.dump(model, f)
+            pickle.dump(model.__dict__, f)
         return model
 
     # ---- lookup ----------------------------------------------------------
