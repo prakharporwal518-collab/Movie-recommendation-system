@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CineMatch — Movie Recommender</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07070d; --bg2: #0f0f1a; --card: #151524; --line: #26263a;
+    --text: #ecebf5; --muted: #9a98b3; --accent: #ff4d6d; --accent2: #7c5cff;
+    --glow: 0 0 40px rgba(255, 77, 109, .35);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; overflow-x: hidden; }
+  h1, h2, h3, .brand { font-family: "Space Grotesk", sans-serif; }
+  button, input { font: inherit; color: inherit; }
+
+  /* scroll progress bar */
+  #progress { position: fixed; inset: 0 auto auto 0; height: 3px; width: 100%; z-index: 50;
+    background: linear-gradient(90deg, var(--accent), var(--accent2)); transform-origin: left; transform: scaleX(0); }
+
+  /* ---------- HERO: 3D poster wall driven by scroll ---------- */
+  .hero { height: 220vh; position: relative; }
+  .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; perspective: 1100px; }
+  .wall { position: absolute; left: 50%; top: 50%; width: 1500px; display: grid;
+    grid-template-columns: repeat(10, 1fr); gap: 18px; transform-style: preserve-3d; will-change: transform; }
+  .wall img, .wall .ph { width: 100%; aspect-ratio: 2/3; border-radius: 10px; object-fit: cover;
+    box-shadow: 0 20px 40px rgba(0,0,0,.6); background: var(--card); }
+  .wall > * { transform: translateZ(var(--z, 0)); }
+  .vignette { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(7,7,13,.35) 0%, rgba(7,7,13,.92) 70%, var(--bg) 100%); }
+  .hero-copy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 16px; will-change: transform, opacity; }
+  .brand { font-size: 14px; letter-spacing: .35em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  .hero h1 { font-size: clamp(40px, 8vw, 104px); line-height: .95; letter-spacing: -.03em; }
+  .hero h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--muted); max-width: 560px; margin: 22px auto 0; font-size: 18px; }
+  .scroll-hint { margin-top: 40px; font-size: 13px; color: var(--muted); letter-spacing: .2em; text-transform: uppercase; animation: bob 2s infinite; }
+  @keyframes bob { 50% { transform: translateY(8px); } }
+
+  /* ---------- SEARCH ---------- */
+  section { position: relative; padding: 90px 16px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .search-panel { max-width: 760px; margin: -40vh auto 0; position: relative; z-index: 5;
+    background: rgba(21, 21, 36, .78); backdrop-filter: blur(14px); border: 1px solid var(--line);
+    border-radius: 22px; padding: 28px; box-shadow: 0 40px 80px rgba(0,0,0,.5); transform-style: preserve-3d; }
+  .search-panel h2 { font-size: 26px; margin-bottom: 6px; }
+  .search-panel .sub { color: var(--muted); margin-bottom: 20px; font-size: 15px; }
+  .field { position: relative; }
+  .field input { width: 100%; padding: 18px 20px; font-size: 18px; background: var(--bg2);
+    border: 1px solid var(--line); border-radius: 14px; outline: none; transition: border-color .2s, box-shadow .2s; }
+  .field input:focus { border-color: var(--accent); box-shadow: var(--glow); }
+  .suggest { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: var(--bg2);
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden; z-index: 10; display: none; }
+  .suggest.open { display: block; }
+  .suggest button { display: flex; gap: 12px; align-items: center; width: 100%; padding: 10px 14px;
+    background: none; border: 0; text-align: left; cursor: pointer; }
+  .suggest button:hover, .suggest button.active { background: #1d1d30; }
+  .suggest img, .suggest .mini { width: 32px; height: 48px; border-radius: 4px; object-fit: cover; background: var(--card); flex: none; }
+  .suggest small { color: var(--muted); }
+  .modes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .modes button { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+    cursor: pointer; font-size: 14px; transition: all .2s; }
+  .modes button[aria-pressed="true"] { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-color: transparent; }
+  .modes button:hover { transform: translateY(-2px); }
+
+  /* ---------- SPOTLIGHT (selected movie) ---------- */
+  .spotlight { display: none; grid-template-columns: 240px 1fr; gap: 36px; align-items: center;
+    margin: 70px auto 0; max-width: 980px; perspective: 1000px; }
+  .spotlight.show { display: grid; }
+  .tilt { transform-style: preserve-3d; transition: transform .15s ease-out; }
+  .spotlight .poster { width: 100%; aspect-ratio: 2/3; border-radius: 16px; object-fit: cover;
+    box-shadow: 0 30px 60px rgba(0,0,0,.7), var(--glow); }
+  .spotlight h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.05; }
+  .meta { color: var(--muted); margin: 10px 0 16px; font-size: 15px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #1f1f33; color: #cfcde6; }
+  .spotlight p.ov { color: #c9c7dd; margin-top: 16px; line-height: 1.6; }
+
+  /* ---------- RESULTS: cards fly in through Z as you scroll ---------- */
+  .results-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin: 80px 0 28px; flex-wrap: wrap; }
+  .results-head h3 { font-size: 30px; }
+  .results-head span { color: var(--muted); font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 28px; perspective: 1200px; }
+  .card { position: relative; cursor: pointer; transform-style: preserve-3d; will-change: transform, opacity;
+    transform: translateZ(-400px) rotateX(35deg); opacity: 0; }
+  .card .inner { border-radius: 14px; overflow: hidden; background: var(--card); border: 1px solid var(--line);
+    transition: transform .25s ease, box-shadow .25s; transform-style: preserve-3d; }
+  .card:hover .inner { box-shadow: 0 30px 60px rgba(0,0,0,.6), var(--glow); }
+  .card img, .card .ph { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; }
+  .card .ph { display: grid; }
+  .ph { display: grid; place-items: center; padding: 14px; text-align: center; font-family: "Space Grotesk";
+    background: linear-gradient(135deg, #2a1838, #121a33); color: #d9d6ef; font-size: 15px; }
+  .card .body { padding: 12px 14px 14px; }
+  .card h4 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .sm { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .bar { height: 4px; border-radius: 4px; background: #24243a; margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .rank { position: absolute; top: 10px; left: 10px; background: rgba(7,7,13,.8); backdrop-filter: blur(6px);
+    padding: 3px 9px; border-radius: 8px; font-size: 12px; font-weight: 600; transform: translateZ(40px); }
+  .rating { position: absolute; top: 10px; right: 10px; background: rgba(7,7,13,.8); padding: 3px 8px;
+    border-radius: 8px; font-size: 12px; transform: translateZ(40px); }
+
+  /* ---------- HOW IT WORKS ---------- */
+  .how { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; perspective: 1000px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px;
+    opacity: 0; transform: rotateY(-25deg) translateZ(-120px); will-change: transform, opacity; }
+  .step b { display: block; font-family: "Space Grotesk"; font-size: 42px; color: var(--accent); }
+  .step h4 { font-size: 19px; margin: 8px 0; }
+  .step p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .step code { background: #1f1f33; padding: 1px 6px; border-radius: 5px; font-size: 13px; color: #ffd1da; }
+  h2.sec { font-size: clamp(30px, 4vw, 46px); margin-bottom: 30px; text-align: center; }
+
+  .status { text-align: center; color: var(--muted); margin-top: 26px; min-height: 22px; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 16px 60px; }
+
+  @media (max-width: 700px) {
+    .spotlight { grid-template-columns: 1fr; text-align: center; }
+    .spotlight .tilt { max-width: 200px; margin: 0 auto; }
+    .chips { justify-content: center; }
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .search-panel { padding: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .step { opacity: 1 !important; transform: none !important; }
+    .scroll-hint { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="hero">
+  <div class="stage">
+    <div class="wall" id="wall"></div>
+    <div class="vignette"></div>
+    <div class="hero-copy" id="heroCopy">
+      <div class="brand">CineMatch</div>
+      <h1>Find your next<br><span>favourite film.</span></h1>
+      <p>Pick a movie you love. We compare plot, genre, cast and keywords across 23,000 films using TF‑IDF and cosine similarity.</p>
+      <div class="scroll-hint">Scroll ↓</div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="search-panel" id="panel">
+    <h2>What did you love watching?</h2>
+    <p class="sub">Start typing a title, then choose what "similar" should mean.</p>
+    <div class="field">
+      <input id="q" type="text" placeholder="e.g. Interstellar, The Godfather, Toy Story…" autocomplete="off" aria-label="Movie title">
+      <div class="suggest" id="suggest" role="listbox"></div>
+    </div>
+    <div class="modes" id="modes">
+      <button data-mode="all" aria-pressed="true">✦ Everything</button>
+      <button data-mode="plot" aria-pressed="false">Plot</button>
+      <button data-mode="genre" aria-pressed="false">Genre</button>
+      <button data-mode="cast" aria-pressed="false">Cast &amp; Director</button>
+      <button data-mode="keywords" aria-pressed="false">Keywords</button>
+    </div>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="wrap">
+    <div class="spotlight" id="spotlight"></div>
+    <div id="resultsWrap" hidden>
+      <div class="results-head">
+        <h3>Recommended for you</h3>
+        <span id="resultsMeta"></span>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2 class="sec">How it works</h2>
+    <div class="how">
+      <div class="step"><b>01</b><h4>Build text features</h4><p>Each movie becomes four documents: <code>overview</code>, <code>genres</code>, <code>top cast + director</code> and <code>keywords</code>.</p></div>
+      <div class="step"><b>02</b><h4>TF‑IDF vectorize</h4><p><code>TfidfVectorizer</code> turns every document into a sparse vector, weighting words that are frequent in one movie but rare overall.</p></div>
+      <div class="step"><b>03</b><h4>Cosine similarity</h4><p><code>cosine_similarity</code> measures the angle between your movie's vector and every other — 1.0 means identical direction.</p></div>
+      <div class="step"><b>04</b><h4>Blend &amp; rank</h4><p>"Everything" mode blends the four scores (plot 35%, keywords 25%, cast 20%, genre 20%) and returns the top matches.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>Content-based filtering · scikit-learn · pandas · Data: The Movies Dataset (TMDB)</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const poster = (m, cls = "") => m.poster
+  ? `<img class="${cls}" src="${m.poster}" alt="${esc(m.title)} poster" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph ${cls}&quot;>${esc(esc(m.title))}</div>'">`
+  : `<div class="ph ${cls}">${esc(m.title)}</div>`;
+
+let mode = "all", current = null;
+
+/* ---------- hero poster wall ---------- */
+fetch("/api/popular").then(r => r.json()).then(list => {
+  const items = [];
+  for (let i = 0; i < 50; i++) {
+    const m = list[i % list.length];
+    items.push(`<img src="${m.poster}" alt="" style="--z:${(i * 37) % 120}px" onerror="this.outerHTML='<div class=&quot;ph&quot; style=&quot;--z:${(i * 37) % 120}px&quot;></div>'">`);
+  }
+  $("#wall").innerHTML = items.join("");
+});
+
+/* ---------- scroll-driven 3D ---------- */
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+function onScroll() {
+  const y = scrollY, vh = innerHeight;
+  $("#progress").style.transform = `scaleX(${y / (document.body.scrollHeight - vh)})`;
+  if (reduce) return;
+
+  // Hero: the poster wall tilts back, spins and recedes as you scroll
+  const p = clamp(y / (vh * 1.2));
+  $("#wall").style.transform =
+    `translate(-50%,-50%) rotateX(${55 - p * 35}deg) rotateZ(${-18 + p * 30}deg) translateZ(${-200 - p * 500}px) translateY(${-p * 200}px)`;
+  $("#heroCopy").style.transform = `translateY(${-p * 120}px) scale(${1 - p * .25})`;
+  $("#heroCopy").style.opacity = 1 - p * 1.4;
+
+  // Search panel rises out of the floor
+  const panel = $("#panel"), r = panel.getBoundingClientRect();
+  const pp = clamp(1 - (r.top - vh * .2) / (vh * .7));
+  panel.style.transform = `perspective(1000px) rotateX(${(1 - pp) * 25}deg) translateZ(${(1 - pp) * -150}px)`;
+
+  // Cards and steps fly in through Z-space based on viewport position
+  document.querySelectorAll(".card, .step").forEach((el, i) => {
+    const t = clamp((vh - el.getBoundingClientRect().top) / (vh * .45));
+    const e = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    const side = el.classList.contains("step") ? "Y" : "X";
+    el.style.opacity = e;
+    el.style.transform = `translateZ(${(1 - e) * -400}px) rotate${side}(${(1 - e) * 35}deg) translateY(${(1 - e) * 60}px)`;
+  });
+}
+addEventListener("scroll", () => requestAnimationFrame(onScroll), { passive: true });
+addEventListener("resize", onScroll);
+onScroll();
+
+/* ---------- mouse tilt ---------- */
+function tilt(el, strength = 14) {
+  if (reduce) return;
+  el.addEventListener("mousemove", e => {
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
+    el.style.transform = `rotateY(${x * strength}deg) rotateX(${-y * strength}deg) translateZ(20px)`;
+  });
+  el.addEventListener("mouseleave", () => el.style.transform = "");
+}
+
+/* ---------- search + autocomplete ---------- */
+const q = $("#q"), sug = $("#suggest");
+let timer, results = [], active = -1;
+q.addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    if (!q.value.trim()) return sug.classList.remove("open");
+    results = await (await fetch(`/api/search?q=${encodeURIComponent(q.value)}`)).json();
+    active = -1;
+    sug.innerHTML = results.length ? results.map((m, i) =>
+      `<button role="option" data-i="${i}">${m.poster ? `<img src="${m.poster}" alt="">` : `<div class="mini"></div>`}
+        <span>${esc(m.title)}<br><small>${esc(m.year)} · ${esc(m.genres.slice(0, 2).join(", "))}</small></span></button>`).join("")
+      : `<button disabled><span><small>No matches</small></span></button>`;
+    sug.classList.add("open");
+  }, 180);
+});
+sug.addEventListener("click", e => {
+  const b = e.target.closest("button[data-i]");
+  if (b) pick(results[b.dataset.i]);
+});
+q.addEventListener("keydown", e => {
+  const btns = sug.querySelectorAll("button[data-i]");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    active = (active + (e.key === "ArrowDown" ? 1 : -1) + btns.length) % btns.length;
+    btns.forEach((b, i) => b.classList.toggle("active", i === active));
+  } else if (e.key === "Enter") {
+    if (active >= 0 && results[active]) pick(results[active]);
+    else if (results[0]) pick(results[0]);
+  } else if (e.key === "Escape") sug.classList.remove("open");
+});
+document.addEventListener("click", e => { if (!e.target.closest(".field")) sug.classList.remove("open"); });
+
+$("#modes").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  mode = b.dataset.mode;
+  document.querySelectorAll("#modes button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  if (current) recommend(current.index);
+});
+
+function pick(m) {
+  sug.classList.remove("open");
+  q.value = m.title;
+  recommend(m.index);
+}
+
+/* ---------- recommendations ---------- */
+async function recommend(index) {
+  $("#status").textContent = "Computing cosine similarity…";
+  const res = await fetch(`/api/recommend?index=${index}&mode=${mode}&n=12`);
+  const data = await res.json();
+  if (!res.ok) return $("#status").textContent = data.error;
+  $("#status").textContent = "";
+  current = data.movie;
+  renderSpotlight(data.movie);
+  renderGrid(data.recommendations);
+  $("#spotlight").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+}
+
+function renderSpotlight(m) {
+  const s = $("#spotlight");
+  s.innerHTML = `<div class="tilt">${poster(m, "poster")}</div>
+    <div><div class="brand">Because you liked</div><h2>${esc(m.title)}</h2>
+    <div class="meta">${esc(m.year)} · ★ ${m.rating.toFixed(1)} (${m.votes.toLocaleString()} votes)${m.director ? " · Dir. " + esc(m.director) : ""}</div>
+    <div class="chips">${m.genres.map(g => `<span class="chip">${esc(g)}</span>`).join("")}</div>
+    <p class="ov">${esc(m.overview)}</p>
+    ${m.cast.length ? `<p class="meta" style="margin-top:12px">Starring ${esc(m.cast.join(", "))}</p>` : ""}</div>`;
+  s.classList.add("show");
+  tilt(s.querySelector(".tilt"));
+}
+
+function renderGrid(recs) {
+  const max = Math.max(...recs.map(r => r.score), 1e-9);
+  const labels = { all: "plot + genre + cast + keywords", plot: "plot", genre: "genre", cast: "cast & director", keywords: "keywords" };
+  $("#resultsMeta").textContent = `ranked by cosine similarity · ${labels[mode]}`;
+  $("#grid").innerHTML = recs.map((r, i) => `
+    <div class="card" data-index="${r.index}" tabindex="0" title="${esc(r.overview.slice(0, 200))}">
+      <div class="inner">
+        ${poster(r)}
+        <span class="rank">#${i + 1} · ${(r.score * 100).toFixed(0)}%</span>
+        <span class="rating">★ ${r.rating.toFixed(1)}</span>
+        <div class="body"><h4>${esc(r.title)}</h4>
+          <div class="sm">${esc(r.year)} · ${esc(r.genres.slice(0, 2).join(", "))}</div>
+          <div class="bar"><i style="width:${(r.score / max) * 100}%"></i></div></div>
+      </div>
+    </div>`).join("");
+  $("#resultsWrap").hidden = false;
+  document.querySelectorAll(".card").forEach(c => {
+    tilt(c.querySelector(".inner"), 18);
+    const go = () => { q.value = c.querySelector("h4").textContent; recommend(+c.dataset.index); };
+    c.addEventListener("click", go);
+    c.addEventListener("keydown", e => e.key === "Enter" && go());
+  });
+  requestAnimationFrame(onScroll);
+}
+</script>
+</body>
+</html>
