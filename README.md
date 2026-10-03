@@ -99,8 +99,20 @@ static/index.html     3D scroll-animated frontend
 tests/                pytest unit tests (synthetic data, run in about 1 second)
 ```
 
+## Deploy on Render
+
+The repo includes a `render.yaml`. In Render, choose **New → Blueprint** and select this repo. Or create a **Web Service** by hand with these settings:
+
+| Setting | Value |
+|---|---|
+| Runtime | Python |
+| Build command | `pip install -r requirements.txt && python recommender.py "Avatar" --rebuild -n 1` |
+| Start command | `gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT` |
+| Env var | `PYTHON_VERSION` = `3.11.9` |
+
+You don't need any secrets or API keys. Render sets `PORT` automatically. The model is built in the **build step** because building it uses about 640 MB of memory, while serving it uses only about 200 MB. That fits within the free tier's 512 MB limit.
+
 ## Ideas to extend
 
 - Add **collaborative filtering** using `ratings_small.csv` (already in the repo) to build a hybrid recommender.
 - Swap TF-IDF for sentence embeddings (for example `sentence-transformers`) to match plots by meaning.
-- Deploy on Render or Railway, and serve the cached model.
